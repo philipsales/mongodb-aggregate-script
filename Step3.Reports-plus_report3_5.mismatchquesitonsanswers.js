@@ -70,6 +70,24 @@ db.getCollection("cases").aggregate(
 
 		// Stage 8
 		{
+			$lookup: {
+			  //get all options
+			   "from": "questions_type",
+			   "as" : "questions_type",
+			   "localField": "forms.form_name",
+			   "foreignField": "_id.form_name"
+			}
+		},
+
+		// Stage 9
+		{
+			$unwind: {
+			    path : "$questions_type"
+			}
+		},
+
+		// Stage 10
+		{
 			$project: {
 			   "_id": 0,
 			   "case_id": "$_id",
@@ -79,13 +97,14 @@ db.getCollection("cases").aggregate(
 			   "form_id": "$forms.form_id",
 			   "form_name": "$forms.form_name",
 			   "questions": "$questions_label.label",
+			   "type": "$questions_type.type",
 			   "options":"$questions_options.options",
 			   "answers":"$forms.answers.question_answer",
 			   "size": { $size: "$forms.answers.question_answer" }
 			}
 		},
 
-		// Stage 9
+		// Stage 11
 		{
 			$project: {
 			    "id": true,
@@ -95,9 +114,8 @@ db.getCollection("cases").aggregate(
 			    "form_id": true,
 			    "form_name": true,
 			    "form_date_created": true,
-			    "answers": 1,
-				"arrayElement": { $arrayElemAt: [  "$answers",   1 ] },
-				"arrayElementz": [""] ,
+			    "answers": true,
+			    "type": true,
 			    "key_value": {  
 			        $arrayToObject: {
 			            //map the questions and answers into object
@@ -108,46 +126,33 @@ db.getCollection("cases").aggregate(
 			                    "$cond": {
 			                    //check if answers has more than 1 answer
 			                    "if" : {  "$eq" : [         
-			                            {
+			                              {
 			                                $let: {
 			                                    vars: { 
 			                                        varin: { 
 			                                          
 			                                           $cond: [ 
-			                                           //if iterate if answer is null
+			                                           //iterate if answer is null
 			                                           {
 			                                             $arrayElemAt: [ 
 			                                              "$answers",  
 			                                              { $indexOfArray : [ "$questions", "$$question" ] }
 			                                            ]
 			                                           }
-			                                            //then
+			                                            //then if answer NOT NULL set key value object 
+			                                            //(e.g. Diagnosis.Laterality: Right)
 			                                            ,{
 			                                             $arrayElemAt: [ 
 			                                              "$answers",  
 			                                              { $indexOfArray : [ "$questions", "$$question" ] }
 			                                            ]
 			                                           }
-			                                           //else
 			                                           ,
-			                                           //hack only
-			                                           /*
-			                                           {
-			                                             $arrayElemAt: [ 
-			                                              "$answers",  
-			                                              1
-			                                            ]
-			                                           }
-			                                           */
+			                                           //else - set null if no answer for equal array number 
+			                                           //(e.g. Diagnosis.Laterality: Right)
 			                                           [""]
 			                                           
 			                                           ]
-			                                     		/*
-			                                            $arrayElemAt: [ 
-			                                              "$answers",  
-			                                              { $indexOfArray : [ "$questions", "$$question" ] }
-			                                            ]
-			                                            */
 			                                        } 
 			                                    },
 			                                    in: { 
@@ -160,25 +165,71 @@ db.getCollection("cases").aggregate(
 			                                        }
 			                                    }
 			                                }
-			                            } ,  
-			                        1 ]  } ,
+			                            } ,
+			                        //equal to 1 answer  
+			                        1 
+			                        ]  } ,
 			                  
 			                        //if answers equal to 1 answer
-			                        "then" :  { 
-			                            "k" : "$$question" , 
-			                            "v" : { 
-			                              //set empty string if null
-			                              $ifNull: 
-			                              [ 
-			                              { $min: { $arrayElemAt: [ "$answers", { "$indexOfArray" : [ "$questions", "$$question" ] } ] } }, 
-			                              "" 
-			                              ] 
-			                            }
+			                        "then" :  {
+			                             
+			                             //check question type
+			                             $cond: [
+			                               //if question type textbox
+			                               { 
+			                                 $or: [
+			                                   {  $eq: [ { $arrayElemAt: [ "$type", { "$indexOfArray" : [ "$questions", "$$question" ] } ]  }, "textbox" ] },
+			                                   {  $eq: [ { $arrayElemAt: [ "$type", { "$indexOfArray" : [ "$questions", "$$question" ] } ]  }, "datepicker" ] },
+			                                  // {  $ne: [ { $min: { $arrayElemAt: [ "$answers", { "$indexOfArray" : [ "$questions", "$$question" ] } ] } },  "" ] }
+			                                 
+			                                 ]
+			                               
+			                               }
+			                               ,
+			                               //if textbox or datepicker, retain value, set null if no value
+			                               {
+			                                 
+			                                 "k" : "$$question" , 
+			                                 "v" : { 
+			                                     //set empty string if null
+			                                     $ifNull: 
+			                                     [ 
+			                                     { $min: { $arrayElemAt: [ "$answers", { "$indexOfArray" : [ "$questions", "$$question" ] } ] } }, 
+			                                     "" 
+			                                     ] 
+			                                 }
+			                                 
+			                               },
+			                               
+			                               //else set value as array if only have 1 answer else set as null
+			                               {
+			                                 
+			                                   $cond: [
+			                                     {  $ne: [ { $min: { $arrayElemAt: [ "$answers", { "$indexOfArray" : [ "$questions", "$$question" ] } ] } },  "" ] },
+			                                     {
+			                                       "k" : "$$question",
+			                                       "v" : { $arrayElemAt: [ "$answers", { "$indexOfArray" : [ "$questions", "$$question" ] } ] }
+			                                     },
+			                                     {
+			                                       "k" : "$$question",
+			                                       "v" : ""
+			                                     }
+			                                     
+			                                   ]
+			                                
+			                                 }
+			                                 
+			                               
+			                             ]
+			                         
+			                             
+			                            
 			                        },
 			                        //if answers has more than 1 answers
 			                        "else" : {
-			                        "k" : "$$question",
-			                        "v" : { $arrayElemAt: [ "$answers", { "$indexOfArray" : [ "$questions", "$$question" ] } ] }
+			                          "k" : "$$question",
+			                         // "v" : "bar"
+			                          "v" : { $arrayElemAt: [ "$answers", { "$indexOfArray" : [ "$questions", "$$question" ] } ] }
 			                        }
 			        
 			                    } 
@@ -189,21 +240,21 @@ db.getCollection("cases").aggregate(
 			}
 		},
 
-		// Stage 10
+		// Stage 12
 		{
 			$addFields: {
 			  //copy all outside fields inside keyvalue for replaceRoot
-			   "key_value._id": "$id",
-			   "key_value._case_id": "$case_id", 
-			   "key_value._case_number": "$case_number" ,
-			   "key_value._form_id": "$form_id",
-			   "key_value._form_name": "$form_name",
-			   "key_value._form_date_created": "$form_date_created",
-			   "key_value._diagnosis": "$diagnosis"
+			   "key_value.AA_id": "$id",
+			   "key_value.AA_case_id": "$case_id", 
+			   "key_value.AA_case_number": "$case_number" ,
+			   "key_value.AA_form_id": "$form_id",
+			   "key_value.AA_form_name": "$form_name",
+			   "key_value.AA_form_date_created": "$form_date_created",
+			   "key_value.AA_diagnosis": "$diagnosis"
 			}
 		},
 
-		// Stage 11
+		// Stage 13
 		{
 			$replaceRoot: {
 			  "newRoot": "$key_value" ,
@@ -211,11 +262,11 @@ db.getCollection("cases").aggregate(
 			}
 		},
 
-		// Stage 12
+		// Stage 14
 		{
 			$project: {
 			   //map to pivot multiple answers
-			   "date_created" : "$_form_date_created",
+			   "date_created" : "$AA_form_date_created",
 			    "ROOT" : "$$ROOT",
 			    
 			    //"ROOT" : "$$ROOT",
@@ -231,12 +282,19 @@ db.getCollection("cases").aggregate(
 			           in:   
 			           //2nd param
 			           {
-			               "$cond" : {
-			                     //values IS array
-			                     "if" : {  "$eq" : [   { $isArray: "$$root.v" } , true ] } , 
+			               "$cond" : [
+			                     //check if value IS array
+			                     {  
+			                       $or: [
+			                         { $eq : [   { $isArray: "$$root.v" } , true ] } ,
+			                        // { $ne : [  "$$root.v"  , "" ] } ,
+			                       ]
 			                     
-			                     
-			                       "then" : { 
+			                     },
+			                     //if array then explode and assign Value as 1
+			                     //(e.g Diagnosis.Uterus: 1, Diagnosis. Ovary: 1)
+			                      // "then" : 
+			                     { 
 			                          $arrayToObject: {
 			                              $map: {
 			                                 input: "$$root.v" ,
@@ -248,12 +306,13 @@ db.getCollection("cases").aggregate(
 			                              }  
 			                           }
 			                                
-			                       },
+			                      },
 			                       //values is not array
 			            
 			                     //"else" : { $arrayToObject: { $literal: [ { "k": "Primary Organ Site", "v": "Breast"} ] } },
 			    
-			                       "else" : { 
+			                    //   "else"
+			                     { 
 			                    
 			                    
 			                          $arrayToObject: {
@@ -273,7 +332,7 @@ db.getCollection("cases").aggregate(
 			                       
 			                     
 			                      
-			                 }
+			                 ]
 			              
 			            }
 			          }
@@ -282,7 +341,7 @@ db.getCollection("cases").aggregate(
 			}
 		},
 
-		// Stage 13
+		// Stage 15
 		{
 			$unwind: {
 			  //unwind to explode answer arrays
@@ -292,7 +351,7 @@ db.getCollection("cases").aggregate(
 			}
 		},
 
-		// Stage 14
+		// Stage 16
 		{
 			$group: {
 			     _id: "$date_created", 
@@ -300,14 +359,14 @@ db.getCollection("cases").aggregate(
 			}
 		},
 
-		// Stage 15
+		// Stage 17
 		{
 			$replaceRoot: {
 			    newRoot: "$results"
 			}
 		},
 
-		// Stage 16
+		// Stage 18
 		{
 			$out: "medicalreports"
 		},
