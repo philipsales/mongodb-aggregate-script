@@ -9,32 +9,6 @@ db.getCollection("forms").aggregate(
 			    "name" : "$name",
 			    "organization" : "$organization",
 			    "sections" : "$sections",
-			    "answers_label" : {
-			        "$map" : {
-			            "input" : "$sections.questions",
-			            "as" : "label",
-			            "in": {
-			            "$map" : {
-			                "input" : "$$label.label",
-			                "as" : "value",
-			                "in" : {
-			                    $concat: [
-			                        { 
-			                            $arrayElemAt: [ 
-			                                "$sections.name", 
-			                                { 
-			                                    "$indexOfArray" : [ "$sections.questions.label", "$$label.label" ] 
-			                                } 
-			                            ] 
-			                        },
-			                        ".",
-			                        "$$value",
-			                    ]
-			                }
-			            }
-			        }
-			    }
-			},
 			    "answers_type" : {
 			        "$map" : {
 			            "input" : "$sections.questions",
@@ -43,6 +17,7 @@ db.getCollection("forms").aggregate(
 			            "$map" : {
 			                "input" : "$$type.type",
 			                "as" : "value",
+			                /*
 			                "in" : {
 			                    $concat: [
 			                        { 
@@ -57,26 +32,13 @@ db.getCollection("forms").aggregate(
 			                        "$$value",
 			                    ]
 			                }
+			                */
+			                "in" :  "$$value"
+			                    
+			                
 			            }
 			        }
-			    }
-			},
-			   
-			"answers_keys" : {
-			        "label" : {
-			            "$map" : {
-			                "input" : "$sections.questions.label",
-			                "as" : "label",
-			                "in" : "$$label"
-			            }
-			        },
-			        "keys" : {
-			            "$map" : {
-			                "input" : "$sections.questions.key",
-			                "as" : "key",
-			                "in" : "$$key"
-			            }
-			        }
+			      }
 			    }
 			}
 		},
@@ -84,7 +46,7 @@ db.getCollection("forms").aggregate(
 		// Stage 2
 		{
 			$unwind: {
-			    path : "$answers_label",
+			    path : "$answers_type",
 			    includeArrayIndex : "arrayIndex", // optional
 			    preserveNullAndEmptyArrays : false // optional
 			}
@@ -93,7 +55,7 @@ db.getCollection("forms").aggregate(
 		// Stage 3
 		{
 			$unwind: {
-			    path : "$answers_label",
+			    path : "$answers_type",
 			    includeArrayIndex : "arrayIndex", // optional
 			    preserveNullAndEmptyArrays : false // optional
 			}
@@ -107,14 +69,14 @@ db.getCollection("forms").aggregate(
 			       "form_name": "$name", 
 			       "organization": "$organization" 
 			      },
-			     "label" : { $push: "$answers_label" } ,
+			     "type" : { $push: "$answers_type" } ,
 			    
 			}
 		},
 
 		// Stage 5
 		{
-			$out: "questions_label"
+			$out: "questions_type"
 		},
 
 	]

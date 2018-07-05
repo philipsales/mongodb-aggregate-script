@@ -139,8 +139,8 @@ db.getCollection("medicalreports").aggregate(
 			$project: {         
 			           
 			       "_id": {
-			          "_id":"$_id",
-			          "_form_name": "$_form_name"
+			          "_id":"$AA_id",
+			          "_form_name": "$AA_form_name"
 			        },
 			       "TEST":  { $objectToArray: "$$ROOT" } ,
 			       "results" : {
@@ -154,7 +154,7 @@ db.getCollection("medicalreports").aggregate(
 			               "$cond" : {
 			                     
 			                     "if" : 
-			                      	//value is string 
+			                          //value is string 
 			                         {  "$eq" : [   { $type: "$$fuck.v" } , 'string' ] },
 			                       
 			                      
@@ -194,10 +194,10 @@ db.getCollection("medicalreports").aggregate(
 			                       //values is not array
 			            
 			                     //"else" : { $arrayToObject: { $literal: [ { "k": "Primary Organ Site", "v": "Breast"} ] } },
-			    					//value is NOT string 
+			                        //value is NOT string 
 			                       "else" : { 
 			                    
-			                    		  //NOT empty
+			                              //NOT empty
 			                          $arrayToObject: {
 			                              $map: {
 			                                 input: { $objectToArray: "$$fuck" },
@@ -262,14 +262,14 @@ db.getCollection("medicalreports").aggregate(
 			           in: [
 			            { $mergeObjects: {
 			              $map: {
-						    input:  { $objectToArray: "$$array" } ,
-						     as: "value",
-						     in: 
-						     { 
-						       "key": "$$value.k" ,
-						       "value": "$$value.v" 
-						     }
-						 }
+			                input:  { $objectToArray: "$$array" } ,
+			                 as: "value",
+			                 in: 
+			                 { 
+			                   "key": "$$value.k" ,
+			                   "value": "$$value.v" 
+			                 }
+			             }
 			            }
 			            }                   
 			
